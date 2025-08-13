@@ -1,12 +1,12 @@
-# Update HTML: add keyboard-controlled extra zoom (no slider), and shrink buttons further when collapsed.
-html_zoom_small = """<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>AlphaPWR Demo — collapsible side menu + Home + extra zoom</title>
+<title>AlphaPWR Demo — side menu + zoom + magnifier (refactored, variable driven)</title>
 <style>
 :root{
+  /* Colors */
   --bg:#000;
   --text:#e7ecf2;
   --muted:#9aa3b2;
@@ -20,132 +20,128 @@ html_zoom_small = """<!DOCTYPE html>
   --accent-deep:#0b4127;
   --ring: rgba(33,208,122,0.28);
   --warning:#ffb022;
-  /* Extra in-page zoom (stackable with browser zoom). Use keyboard + / - / 0 */
+
+  /* Extra in page zoom (stackable with browser zoom). Keyboard: + / - / 9 reset */
   --scale: 1;
+
+  /* Menu sizing */
+  --menu-w: 320px;
+  --menu-w-collapsed: 64px;
+
+  /* TV frame metrics (px, unitless numbers so we can calc ratios in JS) */
+  --frame-w: 2500;   /* overall TV image width */
+  --frame-h: 1406;   /* overall TV image height */
+
+  /* Live app slot inside the TV frame */
+  --slot-x: 1139;    /* left offset of the phone viewport inside the TV image */
+  --slot-y: 142;     /* top offset */
+  --slot-w: 301;     /* rendered width on the TV frame */
+  --slot-h: 532;     /* rendered height on the TV frame */
+
+  /* Intrinsic CSS pixel size of the embedded app */
+  --design-w: 1080;  /* AlphaPWR portrait width */
+  --design-h: 1920;  /* AlphaPWR portrait height */
+
+  /* Intrinsic pixel size of static overlay images */
+  --overlay-w: 1620;
+  --overlay-h: 2880;
 }
-html, body{
-  height:100%;
-  margin:0;
-  background:var(--bg);
-  color:var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-}
+
+html, body{ height:100%; margin:0; background:var(--bg); color:var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
 .viewport{ width:100vw; height:100vh; overflow:auto; position:relative; }
 
 /* ===== Demo canvas (TV) ===== */
-/* Wrapper grows/shrinks with --scale so you can scroll around when zoomed in */
 .wrapper{
-  width: calc(2500px * var(--scale));
-  height: calc(1406px * var(--scale));
+  width: calc(var(--frame-w) * 1px * var(--scale));
+  height: calc(var(--frame-h) * 1px * var(--scale));
   position:relative; overflow:hidden;
-  margin:40px 20px 20px 380px;        /* space for menu when expanded */
+  margin:40px 20px 20px calc(var(--menu-w) + 60px); /* space for menu when expanded */
   transition: margin-left .2s ease;
 }
-.wrapper.menu-collapsed{ margin-left: 84px; }  /* space for slim rail */
+.wrapper.menu-collapsed{ margin-left: calc(var(--menu-w-collapsed) + 20px); }
 
-/* Frame scaled by --scale (independent of browser zoom) */
 .frame-container{
-  width:2500px; height:1406px; position:absolute; inset:0 auto auto 0;
+  width: calc(var(--frame-w) * 1px);
+  height: calc(var(--frame-h) * 1px);
+  position:absolute; inset:0 auto auto 0;
   background:url("https://storage.googleapis.com/files_webpage/Digital%20demo/alphapwr_frame.png") no-repeat top left;
   background-size:100% 100%;
   transform: scale(var(--scale));
   transform-origin: top left;
+  will-change: transform;
 }
-.frame-container iframe{
-  position:absolute; top:142px; left:1139px; width:1080px; height:1920px;
-  border:none; overflow:hidden;
-  transform:scale(0.278703704, 0.277083333); transform-origin:top left;
+
+/* Place the live viewport elements using slot metrics */
+.frame-container .slot{
+  position:absolute;
+  top:  calc(var(--slot-y) * 1px);
+  left: calc(var(--slot-x) * 1px);
+  width: calc(var(--slot-w) * 1px);
+  height: calc(var(--slot-h) * 1px);
+  overflow:hidden;
 }
+.frame-container iframe,
+.frame-container .hit,
 .frame-container img#overlayImg{
-  position:absolute; top:142px; left:1139px; width:1620px; height:2880px;
-  object-fit:cover;
-  transform:scale(0.185802469, 0.184722222); transform-origin:top left;
-  display:none; pointer-events:none;
+  position:absolute;
+  top:0;
+  left:0;
+  border:none;
+  transform-origin: top left;
 }
 
-/* ===== Side menu ===== */
+/* Intrinsic sizes, scaling is applied by JS based on variables so numbers stay in sync */
+.frame-container iframe,
+.frame-container .hit{ width: calc(var(--design-w) * 1px); height: calc(var(--design-h) * 1px); }
+.frame-container img#overlayImg{ width: calc(var(--overlay-w) * 1px); height: calc(var(--overlay-h) * 1px); object-fit:cover; display:none; pointer-events:none; }
+
+/* Transparent hit layer over live iframe to capture pointer when magnifier is on */
+.frame-container .hit{ background: transparent; pointer-events: none; z-index: 2; }
+
+/* ===== Side menu (always inside viewport) ===== */
 .menu{
-  position:fixed; left:24px; top:50%; transform:translateY(-50%);
-  width:320px;
+  position:fixed; left:24px; top:16px; bottom:16px; /* clamp to viewport */
+  width:var(--menu-w);
   background:linear-gradient(180deg, var(--panel-top), var(--panel-bot));
-  border:1px solid #1b2433;
-  border-radius:18px;
-  padding:14px;
+  border:1px solid #1b2433; border-radius:18px; padding:14px;
   box-shadow: 0 18px 50px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.03);
-  z-index:10;
-  transition: width .2s ease, padding .2s ease;
+  z-index:10; transition: width .2s ease, padding .2s ease;
+  display:flex; flex-direction:column; box-sizing:border-box;
+  max-height: calc(100vh - 32px); overflow: hidden; /* header/footer pinned, body scrolls */
 }
-.menu.collapsed{ width:64px; padding:8px; }
+.menu.collapsed{ width:var(--menu-w-collapsed); padding:8px; }
 
-/* Header with collapse button */
-.menu-head{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:4px 6px 10px 6px;
-  border-bottom:1px solid #1e2736;
-  margin-bottom:10px;
-}
+/* Header with controls */
+.menu-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 6px 10px 6px; border-bottom:1px solid #1e2736; margin-bottom:10px; }
 .menu-title{ font-size:18px; font-weight:800; letter-spacing:.3px; }
-.collapse{
-  border:1px solid #243044;
-  border-radius:10px;
-  background:#121823;
-  color:#cdd6e3;
-  padding:6px 8px;
-  display:inline-flex; align-items:center; gap:6px;
-  cursor:pointer;
-}
-.collapse svg{ width:14px; height:14px; }
-.menu.collapsed .collapse .lbl{ display:none; }
-.menu.collapsed .collapse{ padding:6px; transform:rotate(180deg); }
+.btn{ border:1px solid #243044; border-radius:10px; background:#121823; color:#cdd6e3; padding:6px 8px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+.btn svg{ width:14px; height:14px; }
+.menu.collapsed .btn .lbl{ display:none; }
+.menu.collapsed .collapse{ transform:rotate(180deg); }
+
+/* Scrollable body to keep menu inside viewport */
+.menu-body{ flex:1; min-height:0; overflow:auto; overscroll-behavior: contain; display:flex; flex-direction:column; gap:0; }
 
 /* Banner */
-.banner{
-  background:#0d2246; color:#cfe2ff; font-size:13px;
-  border:1px solid #1e3a6a; border-radius:12px;
-  padding:10px 12px; margin:8px 6px 12px 6px;
-  display:flex; align-items:flex-start; gap:10px;
-}
+.banner{ background:#0d2246; color:#cfe2ff; font-size:13px; border:1px solid #1e3a6a; border-radius:12px; padding:10px 12px; margin:8px 6px 12px 6px; display:flex; align-items:flex-start; gap:10px; }
 .banner svg{ width:16px; height:16px; margin-top:2px; }
 
 /* Pill buttons list */
-.nav-list{ display:flex; flex-direction:column; gap:10px; }
-.pill{
-  display:grid; grid-template-columns: auto 1fr auto auto; align-items:center;
-  gap:10px;
-  padding:12px;
-  background:linear-gradient(180deg, var(--pill-top), var(--pill-bot));
-  border:1px solid var(--pill-border);
-  border-radius:12px;
-  color:var(--text);
-  cursor:pointer;
-  box-shadow: 0 2px 0 rgba(0,0,0,0.3);
-  transition: transform .12s ease, border-color .12s ease, background .12s ease, padding .12s ease;
-}
+.nav-list{ display:flex; flex-direction:column; gap:10px; padding-bottom:8px; }
+.pill{ display:grid; grid-template-columns: auto 1fr auto auto; align-items:center; gap:10px; padding:12px; background:linear-gradient(180deg, var(--pill-top), var(--pill-bot)); border:1px solid var(--pill-border); border-radius:12px; color:var(--text); cursor:pointer; box-shadow: 0 2px 0 rgba(0,0,0,0.3); transition: transform .12s ease, border-color .12s ease, background .12s ease, padding .12s ease; }
 .pill:hover{ transform:translateY(-1px); border-color:var(--pill-border-hover); }
 .pill:active{ transform:none; }
-.ic{
-  width:22px; height:22px; border-radius:50%;
-  display:grid; place-items:center;
-  border:1px solid #2a3444;
-  color:#9fb0c8;
-}
+.ic{ width:22px; height:22px; border-radius:50%; display:grid; place-items:center; border:1px solid #2a3444; color:#9fb0c8; }
 .ic svg{ width:14px; height:14px; }
 .name{ font-weight:700; font-size:16px; }
 .meta{ font-size:12px; color:#9aa3b2; margin-left:6px; }
 .meta.warn{ color:var(--warning); }
 
-.cog{
-  width:36px; height:36px; border-radius:10px;
-  display:grid; place-items:center; background:#0f1622; border:1px solid #263044;
-}
+.cog{ width:36px; height:36px; border-radius:10px; display:grid; place-items:center; background:#0f1622; border:1px solid #263044; }
 .cog svg{ width:16px; height:16px; color:#aab4c3; }
 
-.puck{
-  width:36px; height:36px; border-radius:50%;
-  display:grid; place-items:center; background:var(--accent);
-  box-shadow:0 0 0 2px var(--accent-deep) inset, 0 0 0 0 var(--ring);
-  transition: box-shadow .12s ease, filter .12s ease, width .12s ease, height .12s ease;
-}
+.puck{ width:36px; height:36px; border-radius:50%; display:grid; place-items:center; background:var(--accent); box-shadow:0 0 0 2px var(--accent-deep) inset, 0 0 0 0 var(--ring); transition: box-shadow .12s ease, filter .12s ease, width .12s ease, height .12s ease; }
 .pill:hover .puck{ box-shadow:0 0 0 2px var(--accent-deep) inset, 0 0 0 10px var(--ring); filter:saturate(1.08); }
 .puck svg{ width:16px; height:16px; }
 
@@ -162,45 +158,45 @@ html, body{
 .menu.collapsed .pill .cog{ display:none; }
 
 .menu.collapsed .nav-list{ gap:6px; }
-.menu.collapsed .pill{
-  grid-template-columns: 1fr;
-  justify-items:center;
-  padding:6px;
-}
-.menu.collapsed .puck{ width:28px; height:28px; }
+.menu.collapsed .pill{ grid-template-columns: 1fr; justify-items:center; padding:10px; min-width:44px; min-height:44px; /* WCAG target size */ }
+.menu.collapsed .puck{ width:24px; height:24px; }
 .menu.collapsed .pill{ border-radius:10px; }
 
 /* Footer actions */
-.footer{
-  margin-top:12px; display:flex; flex-direction:column; gap:8px;
-}
-.ghost{
-  width:100%; padding:12px; border-radius:12px;
-  border:1px solid #273044; background:#131a24; color:#cbd3df;
-  font-weight:600; cursor:pointer;
-}
-.danger{
-  width:100%; padding:12px; border-radius:12px;
-  border:1px solid #4b2222; background:#1e0f0f; color:#ff9a9a;
-  font-weight:600; cursor:pointer;
-}
-.home{
-  width:100%; padding:12px; border-radius:12px; border:1px solid #204d38;
-  background:#0d1f17; color:#7fe8b6; font-weight:700; cursor:pointer;
-}
-/* Hide footer text when collapsed */
+.footer{ margin-top:auto; display:flex; flex-direction:column; gap:8px; padding-top:8px; border-top:1px solid #1e2736; background: linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,0.12)); }
+.ghost{ width:100%; padding:12px; border-radius:12px; border:1px solid #273044; background:#131a24; color:#cbd3df; font-weight:600; cursor:pointer; }
+.danger{ width:100%; padding:12px; border-radius:12px; border:1px solid #4b2222; background:#1e0f0f; color:#ff9a9a; font-weight:600; cursor:pointer; }
+.home{ width:100%; padding:12px; border-radius:12px; border:1px solid #204d38; background:#0d1f17; color:#7fe8b6; font-weight:700; cursor:pointer; }
 .menu.collapsed .footer .ghost,
 .menu.collapsed .footer .danger,
 .menu.collapsed .footer .home{ display:none; }
 
-/* ===== Tiny on-screen zoom HUD ===== */
-.zoom-hud{
-  position:fixed; right:16px; bottom:16px;
-  background:rgba(20,26,38,.8); color:#cfe2ff; font-weight:700;
-  border:1px solid #273044; border-radius:10px;
-  padding:6px 10px; pointer-events:none; opacity:0; transition:opacity .2s ease;
-}
+/* ===== Tiny on screen zoom HUD ===== */
+.zoom-hud{ position:fixed; right:16px; bottom:16px; background:rgba(20,26,38,.8); color:#cfe2ff; font-weight:700; border:1px solid #273044; border-radius:10px; padding:6px 10px; pointer-events:none; opacity:0; transition:opacity .2s ease; z-index: 20; }
 .zoom-hud.show{ opacity:1; }
+
+/* ===== Magnifier lens ===== */
+.lens{ position:fixed; left:0; top:0; width:408px; height:408px; border-radius:50%; border:2px solid #2a3446; box-shadow: 0 8px 20px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.06); overflow:hidden; pointer-events:none; display:none; z-index:15; background: rgba(10,14,22,0.12); backdrop-filter: blur(0px); }
+.lens iframe{ position:absolute; left:0; top:0; border:none; width: calc(var(--design-w) * 1px); height: calc(var(--design-h) * 1px); transform-origin: top left; pointer-events:none; will-change: transform; }
+
+
+.tool[aria-pressed="true"]{ outline:2px solid var(--accent); outline-offset:2px; }
+.magnify-on #liveHit{ cursor: none; }
+.magnify-on #liveSlot{ cursor: none; }
+
+button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:12px; }
+.pill:focus-visible .puck{ box-shadow:0 0 0 2px var(--accent) inset, 0 0 0 10px var(--ring); }
+
+@media (prefers-reduced-motion: reduce) {
+  .wrapper, .pill, .puck, .zoom-hud { transition: none !important; }
+}
+
+/* Optional: auto collapse on narrow viewports */
+@media (max-width: 1400px){
+  .menu{ width:var(--menu-w-collapsed); padding:8px; }
+  .menu .menu-title, .menu .banner, .menu .pill .name, .menu .pill .meta, .menu .pill .ic, .menu .pill .cog, .menu .footer button { display:none; }
+  .wrapper{ margin-left: calc(var(--menu-w-collapsed) + 20px); }
+}
 </style>
 </head>
 <body>
@@ -208,8 +204,11 @@ html, body{
 <div class="viewport">
   <div id="wrap" class="wrapper">
     <div class="frame-container">
-      <iframe id="liveFrame" src="https://pwr.alphatek.no" loading="lazy" title="AlphaPWR live view"></iframe>
+      <div id="liveSlot" class="slot">
+      <iframe id="liveFrame" src="https://pwr.alphatek.no" loading="lazy" title="AlphaPWR live view" referrerpolicy="no-referrer"></iframe>
+      <div id="liveHit" class="hit" aria-hidden="true"></div>
       <img id="overlayImg" src="" alt="">
+    </div>
     </div>
   </div>
 </div>
@@ -217,201 +216,403 @@ html, body{
 <aside id="menu" class="menu" aria-label="Controls">
   <div class="menu-head">
     <div class="menu-title">Switch screen</div>
-    <button id="toggle" class="collapse" aria-label="Collapse menu" title="Collapse / Expand">
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 6l6 6-6 6" fill="currentColor"/></svg>
-      <span class="lbl">Collapse</span>
-    </button>
+    <div style="display:flex; gap:8px;">
+      <button id="magnifyToggle" class="btn tool" aria-label="Toggle magnifier" title="Magnifier (M). Wheel adjusts glass zoom. Shift+Wheel changes glass size. Esc exits." aria-pressed="false" type="button">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="6" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M14.5 14.5L20 20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span class="lbl">Magnifier</span>
+      </button>
+      <button id="toggle" class="btn collapse" aria-label="Collapse menu" title="Collapse / Expand" aria-controls="menu" aria-expanded="true" type="button">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 6l6 6-6 6" fill="currentColor"/></svg>
+        <span class="lbl">Collapse</span>
+      </button>
+    </div>
   </div>
 
-  <div class="banner">
-    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="7" r="1.5" fill="currentColor"/><rect x="11" y="10" width="2" height="7" rx=".8" fill="currentColor"/></svg>
-    <div>This remote is in control of the TV until someone else scans.</div>
-  </div>
+  <div class="menu-body">
+    <div class="banner" role="note">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="7" r="1.5" fill="currentColor"/><rect x="11" y="10" width="2" height="7" rx=".8" fill="currentColor"/></svg>
+      <div>This remote is in control of the TV until someone else scans.</div>
+    </div>
 
-  <div class="nav-list">
-    <button class="pill" data-target="Squat">
-      <div class="ic" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-      </div>
-      <div class="name">Squat</div>
-      <div class="cog" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5m0-3a1 1 0 0 1 1 1l.2 1.3a6.7 6.7 0 0 1 1.1.6l1.2-.6a1 1 0 0 1 1.3.3l1.9 3.3a1 1 0 0 1-.3 1.3l-1.1.7a6.7 6.7 0 0 1 0 1.3l1.1.7a1 1 0 0 1 .3 1.3l-1.9 3.3a1 1 0 0 1-1.3.3l-1.2-.6a6.7 6.7 0 0 1-1.1.6L13 17.5a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1l-.2-1.3a6.7 6.7 0 0 1-1.1-.6l-1.2.6a1 1 0 0 1-1.3-.3L1.3 12.6a1 1 0 0 1 .3-1.3l1.1-.7a6.7 6.7 0 0 1 0-1.3l-1.1-.7a1 1 0 0 1-.3-1.3L3.2 4a1 1 0 0 1 1.3-.3l1.2.6a6.7 6.7 0 0 1 1.1-.6L7 2.5a1 1 0 0 1 1-1z" fill="currentColor"/></svg>
-      </div>
-      <div class="puck" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg>
-      </div>
-    </button>
+    <div class="nav-list" id="navList">
+      <button class="pill" data-target="Squat" type="button">
+        <div class="ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        </div>
+        <div class="name">Squat</div>
+        <div class="cog" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5m0-3a1 1 0 0 1 1 1l.2 1.3a6.7 6.7 0 0 1 1.1.6l1.2-.6a1 1 0 0 1 1.3.3l1.9 3.3a1 1 0 0 1-.3 1.3l-1.1.7a6.7 6.7 0 0 1 0 1.3l1.1.7a1 1 0 0 1 .3 1.3l-1.9 3.3a1 1 0 0 1-1.3.3l-1.2-.6a6.7 6.7 0 0 1-1.1.6L13 17.5a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1l-.2-1.3a6.7 6.7 0 0 1-1.1-.6l-1.2.6a1 1 0 0 1-1.3-.3L1.3 12.6a1 1 0 0 1 .3-1.3l1.1-.7a6.7 6.7 0 0 1 0-1.3l-1.1-.7a1 1 0 0 1-.3-1.3L3.2 4a1 1 0 0 1 1.3-.3l1.2.6a6.7 6.7 0 0 1 1.1-.6L7 2.5a1 1 0 0 1 1-1z" fill="currentColor"/></svg>
+        </div>
+        <div class="puck" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg>
+        </div>
+      </button>
 
-    <button class="pill" data-target="Squat analytics">
-      <div class="ic" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-      </div>
-      <div class="name">Squat <span class="meta warn">analytics</span></div>
-      <div class="cog" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5m0-3a1 1 0 0 1 1 1l.2 1.3a6.7 6.7 0 0 1 1.1.6l1.2-.6a1 1 0 0 1 1.3.3l1.9 3.3a1 1 0 0 1-.3 1.3l-1.1.7a6.7 6.7 0 0 1 0 1.3l1.1.7a1 1 0 0 1 .3 1.3l-1.9 3.3a1 1 0 0 1-1.3.3l-1.2-.6a6.7 6.7 0 0 1-1.1.6L13 17.5a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1l-.2-1.3a6.7 6.7 0 0 1-1.1-.6l-1.2.6a1 1 0 0 1-1.3-.3L1.3 12.6a1 1 0 0 1 .3-1.3l1.1-.7a6.7 6.7 0 0 1 0-1.3l-1.1-.7a1 1 0 0 1-.3-1.3L3.2 4a1 1 0 0 1 1.3-.3l1.2.6a6.7 6.7 0 0 1 1.1-.6L7 2.5a1 1 0 0 1 1-1z" fill="currentColor"/></svg>
-      </div>
-      <div class="puck" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg>
-      </div>
-    </button>
+      <button class="pill" data-target="Squat analytics" type="button">
+        <div class="ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        </div>
+        <div class="name">Squat <span class="meta warn">analytics</span></div>
+        <div class="cog" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5m0-3a1 1 0 0 1 1 1l.2 1.3a6.7 6.7 0 0 1 1.1.6l1.2-.6a1 1 0 0 1 1.3.3l1.9 3.3a1 1 0 0 1-.3 1.3l-1.1.7a6.7 6.7 0 0 1 0 1.3l1.1.7a1 1 0 0 1 .3 1.3l-1.9 3.3a1 1 0 0 1-1.3.3l-1.2-.6a6.7 6.7 0 0 1-1.1.6L13 17.5a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1l-.2-1.3a6.7 6.7 0 0 1-1.1-.6l-1.2.6a1 1 0 0 1-1.3-.3L1.3 12.6a1 1 0 0 1 .3-1.3l1.1-.7a6.7 6.7 0 0 1 0-1.3l-1.1-.7a1 1 0 0 1-.3-1.3L3.2 4a1 1 0 0 1 1.3-.3l1.2.6a6.7 6.7 0 0 1 1.1-.6L7 2.5a1 1 0 0 1 1-1z" fill="currentColor"/></svg>
+        </div>
+        <div class="puck" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg>
+        </div>
+      </button>
 
-    <button class="pill" data-target="Pull">
-      <div class="ic" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-      </div>
-      <div class="name">Pull</div>
-      <div class="cog" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5z" fill="currentColor"/></svg></div>
-      <div class="puck" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg></div>
-    </button>
+      <button class="pill" data-target="Pull" type="button">
+        <div class="ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        </div>
+        <div class="name">Pull</div>
+        <div class="cog" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5z" fill="currentColor"/></svg></div>
+        <div class="puck" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg></div>
+      </button>
 
-    <button class="pill" data-target="Jump">
-      <div class="ic" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-      </div>
-      <div class="name">Jump</div>
-      <div class="cog" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5z" fill="currentColor"/></svg></div>
-      <div class="puck" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg></div>
-    </button>
+      <button class="pill" data-target="Jump" type="button">
+        <div class="ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        </div>
+        <div class="name">Jump</div>
+        <div class="cog" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5z" fill="currentColor"/></svg></div>
+        <div class="puck" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg></div>
+      </button>
 
-    <button class="pill" data-target="Balance">
-      <div class="ic" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-      </div>
-      <div class="name">Balance</div>
-      <div class="cog" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5z" fill="currentColor"/></svg></div>
-      <div class="puck" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg></div>
-    </button>
+      <button class="pill" data-target="Balance" type="button">
+        <div class="ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        </div>
+        <div class="name">Balance</div>
+        <div class="cog" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5z" fill="currentColor"/></svg></div>
+        <div class="puck" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg></div>
+      </button>
 
-    <button class="pill" data-target="Monitor">
-      <div class="ic" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-      </div>
-      <div class="name">Monitor</div>
-      <div class="cog" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5z" fill="currentColor"/></svg></div>
-      <div class="puck" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg></div>
-    </button>
+      <button class="pill" data-target="Monitor" type="button">
+        <div class="ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        </div>
+        <div class="name">Monitor</div>
+        <div class="cog" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5z" fill="currentColor"/></svg></div>
+        <div class="puck" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg></div>
+      </button>
 
-    <button class="pill" data-target="Nordic Hamstring">
-      <div class="ic" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-      </div>
-      <div class="name">Nordic <span class="meta warn">hamstring</span></div>
-      <div class="cog" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5z" fill="currentColor"/></svg></div>
-      <div class="puck" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg></div>
-    </button>
-  </div>
+      <button class="pill" data-target="Nordic Hamstring" type="button">
+        <div class="ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        </div>
+        <div class="name">Nordic <span class="meta warn">hamstring</span></div>
+        <div class="cog" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5z" fill="currentColor"/></svg></div>
+        <div class="puck" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7V5z" fill="currentColor"/></svg></div>
+      </button>
+    </div>
 
-  <div class="footer">
-    <button class="home" id="goHome" aria-label="Show live site">Home</button>
-    <button class="ghost" id="reloadBtn">Reload screen</button>
-    <button class="danger">Sign out from TV</button>
+    <div class="footer">
+      <button class="home" id="goHome" aria-label="Show live site" type="button">Home</button>
+      <button class="ghost" id="reloadBtn" type="button">Reload screen</button>
+      <button class="danger" id="signOutBtn" type="button">Sign out from TV</button>
+    </div>
   </div>
 </aside>
 
-<div id="zoomHud" class="zoom-hud">100%</div>
+<div id="zoomHud" class="zoom-hud" role="status" aria-live="polite">100%</div>
+<div id="lens" class="lens" aria-hidden="true">
+  <iframe id="lensFrame" src="about:blank" title="Magnified view" referrerpolicy="no-referrer"></iframe>
+</div>
 
 <script>
-const overlay = document.getElementById('overlayImg');
-const iframe  = document.getElementById('liveFrame');
-const wrap    = document.getElementById('wrap');
-const menu    = document.getElementById('menu');
-const toggle  = document.getElementById('toggle');
-const reloadBtn = document.getElementById('reloadBtn');
-const zoomHud = document.getElementById('zoomHud');
+(function(){
+  // ===== Elements =====
+  const overlay = document.getElementById('overlayImg');
+  const iframe  = document.getElementById('liveFrame');
+  const liveHit = document.getElementById('liveHit');
+  const wrap    = document.getElementById('wrap');
+  const menu    = document.getElementById('menu');
+  const toggle  = document.getElementById('toggle');
+  const reloadBtn = document.getElementById('reloadBtn');
+  const zoomHud = document.getElementById('zoomHud');
+  const homeBtn = document.getElementById('goHome');
+  const signOutBtn = document.getElementById('signOutBtn');
+  const magnifyToggle = document.getElementById('magnifyToggle');
+  const lens = document.getElementById('lens');
+  const liveSlot = document.getElementById('liveSlot');
+  const lensFrame = document.getElementById('lensFrame');
 
-const imageMap = {
-  "Squat": "https://storage.googleapis.com/files_webpage/Digital%20demo/Squat.png",
-  "Squat analytics": "https://storage.googleapis.com/files_webpage/Digital%20demo/Squat%20analytics.png",
-  "Pull": "https://storage.googleapis.com/files_webpage/Digital%20demo/Pull.png",
-  "Jump": "https://storage.googleapis.com/files_webpage/Digital%20demo/Jump.png",
-  "Balance": "https://storage.googleapis.com/files_webpage/Digital%20demo/Balance.png",
-  "Monitor": "https://storage.googleapis.com/files_webpage/Digital%20demo/Monitor.png",
-  "Nordic Hamstring": "https://storage.googleapis.com/files_webpage/Digital%20demo/Nordic%20Hamstring.png"
-};
+  // ===== Static overlays =====
+  const imageMap = {
+    "Squat": "https://storage.googleapis.com/files_webpage/Digital%20demo/Squat.png",
+    "Squat analytics": "https://storage.googleapis.com/files_webpage/Digital%20demo/Squat%20analytics.png",
+    "Pull": "https://storage.googleapis.com/files_webpage/Digital%20demo/Pull.png",
+    "Jump": "https://storage.googleapis.com/files_webpage/Digital%20demo/Jump.png",
+    "Balance": "https://storage.googleapis.com/files_webpage/Digital%20demo/Balance.png",
+    "Monitor": "https://storage.googleapis.com/files_webpage/Digital%20demo/Monitor.png",
+    "Nordic Hamstring": "https://storage.googleapis.com/files_webpage/Digital%20demo/Nordic%20Hamstring.png"
+  };
+  Object.values(imageMap).forEach(src => { const im = new Image(); im.decoding='async'; im.src = src; });
 
-function setActive(btn){
-  document.querySelectorAll('.pill[aria-current="true"]').forEach(b=>b.removeAttribute('aria-current'));
-  if(btn) btn.setAttribute('aria-current','true');
-}
+  // ===== Metrics via CSS variables =====
+  const css = getComputedStyle(document.documentElement);
+  const v = n => parseFloat(css.getPropertyValue(n)) || 0;
+  const metrics = {
+    get slotW(){ return v('--slot-w'); },
+    get slotH(){ return v('--slot-h'); },
+    get designW(){ return v('--design-w'); },
+    get designH(){ return v('--design-h'); },
+    get overlayW(){ return v('--overlay-w'); },
+    get overlayH(){ return v('--overlay-h'); },
+  };
 
-function showImage(key, btn){
-  if(!imageMap[key]) return;
-  overlay.src = imageMap[key];
-  overlay.style.display = 'block';
-  iframe.style.display  = 'none';
-  setActive(btn);
-}
-
-document.querySelectorAll('.pill').forEach(btn => {
-  btn.addEventListener('click', () => showImage(btn.dataset.target, btn));
-});
-
-// Collapse / expand
-toggle.addEventListener('click', ()=>{
-  menu.classList.toggle('collapsed');
-  wrap.classList.toggle('menu-collapsed');
-});
-
-// Home button -> show live iframe
-document.getElementById('goHome').addEventListener('click', ()=>{
-  overlay.style.display = 'none';
-  iframe.style.display  = 'block';
-  setActive(null);
-});
-
-// Reload screen (reload overlay if shown, else reload iframe)
-reloadBtn.addEventListener('click', ()=>{
-  if(overlay.style.display === 'block' && overlay.src){
-    const src = overlay.src; overlay.src = ''; requestAnimationFrame(()=> overlay.src = src);
-  }else{
-    const src = iframe.src; iframe.src = ''; requestAnimationFrame(()=> iframe.src = src);
+  // ===== Base scaling (fits app into the slot) =====
+  let baseSx = 1, baseSy = 1;
+  function computeBaseScale(){
+    baseSx = metrics.slotW / metrics.designW;
+    baseSy = metrics.slotH / metrics.designH;
   }
-});
-
-/* ===== Extra zoom (stackable with browser zoom) =====
-   Keys: '+' or '=' to zoom in, '-' to zoom out, '9' to reset to 100% (avoid clashing with '0' = Home) */
-let scale = 1.0;
-const MIN = 0.25, MAX = 6.0, STEP = 0.1;
-
-function applyScale(){
-  document.documentElement.style.setProperty('--scale', scale.toFixed(3));
-  zoomHud.textContent = Math.round(scale*100) + '%';
-  zoomHud.classList.add('show');
-  clearTimeout(applyScale._t);
-  applyScale._t = setTimeout(()=> zoomHud.classList.remove('show'), 900);
-}
-
-window.addEventListener('keydown', (e)=>{
-  // Don't interfere with browser zoom shortcuts (Ctrl/Cmd +/-, etc.)
-  if(e.ctrlKey || e.metaKey) return;
-  if(e.key === '+' || e.key === '='){
-    scale = Math.min(MAX, scale + STEP); applyScale();
-  }else if(e.key === '-'){
-    scale = Math.max(MIN, scale - STEP); applyScale();
-  }else if(e.key === '9'){ // reset to 100%
-    scale = 1.0; applyScale();
+  function applyBaseTransform(){
+    const t = `scale(${baseSx}, ${baseSy}) translateZ(0)`;
+    iframe.style.transform  = t;
+    liveHit.style.transform = t;
+    iframe.style.transformOrigin  = 'top left';
+    liveHit.style.transformOrigin = 'top left';
   }
-});
-
-/* Keyboard shortcuts for screens: 1–7, and 0 is still Home */
-const order = ["Squat","Squat analytics","Pull","Jump","Balance","Monitor","Nordic Hamstring"];
-window.addEventListener('keydown', (e)=>{
-  if(e.ctrlKey || e.metaKey) return;
-  const idx = parseInt(e.key,10);
-  if(!isNaN(idx) && idx>=1 && idx<=order.length){
-    const key = order[idx-1];
-    const btn = document.querySelector('.pill[data-target="'+key+'"]');
-    showImage(key, btn);
+  function applyLiveTransform(){
+    const t = `scale(${baseSx*glassZoom}, ${baseSy*glassZoom}) translateZ(0)`;
+    iframe.style.transform  = t;
+    liveHit.style.transform = t;
   }
-  if(e.key==='0'){ overlay.style.display='none'; iframe.style.display='block'; setActive(null); }
-});
+  function setTransformOriginFromPoint(x, y){
+    // Use the unscaled slot box to compute origin in design pixels
+    const rect = liveSlot.getBoundingClientRect();
+    const u = (x - rect.left) / rect.width;
+    const v = (y - rect.top)  / rect.height;
+    const ox = u * metrics.designW;
+    const oy = v * metrics.designH;
+    const origin = `${ox}px ${oy}px`;
+    iframe.style.transformOrigin  = origin;
+    liveHit.style.transformOrigin = origin;
+  }
+  function applyOverlayTransform(){
+    const ox = metrics.slotW / metrics.overlayW;
+    const oy = metrics.slotH / metrics.overlayH;
+    overlay.style.transform = `scale(${ox}, ${oy}) translateZ(0)`;
+  }
+
+  // ===== Magnifier state (dual-iframe lens; base view stays fixed) =====
+  const GLASS_MIN = 1.0, GLASS_MAX = 10.0, GLASS_STEP = 0.2; // up to 800%
+  const LENS_MIN = 180, LENS_MAX = 800, LENS_STEP = 20;
+  let magnifierOn = false;
+  let glassZoom = 2.0;        // lens zoom factor (start at 2x for obvious effect)
+  let lensDiameter = 408;     // px
+
+  function setLensSize(px){
+    lensDiameter = Math.max(LENS_MIN, Math.min(LENS_MAX, px|0));
+    lens.style.width = lens.style.height = lensDiameter + 'px';
+  }
+
+  function updateLensFromPoint(x, y){
+    if (!magnifierOn) return;
+    const rect = liveSlot.getBoundingClientRect();
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom){
+      lens.style.display = 'none';
+      return;
+    }
+    // Show and position the circular ring
+    lens.style.display = overlay.style.display === 'block' ? 'none' : 'block';
+    lens.style.left = (x - lensDiameter/2) + 'px';
+    lens.style.top  = (y - lensDiameter/2) + 'px';
+
+    // Pin zoom to the cursor
+    setTransformOriginFromPoint(x, y);
+    applyLiveTransform();
+  }
+
+  function setMagnifier(on){
+    magnifierOn = !!on;
+
+    if (magnifierOn && overlay.style.display === 'block'){
+      overlay.style.display = 'none';
+      iframe.style.display  = 'block';
+      setActive(null);
+    }
+
+    document.body.classList.toggle('magnify-on', magnifierOn);
+    magnifyToggle.setAttribute('aria-pressed', String(magnifierOn));
+    // Capture pointer over the cross-origin iframe
+    liveHit.style.pointerEvents = magnifierOn ? 'auto' : 'none';
+
+    if (magnifierOn){
+      // Ensure the lens iframe is not used (single-connection mode)
+      try { lensFrame.src = 'about:blank'; } catch {}
+      glassZoom = GLASS_MAX; // start at requested 10x
+      const rect = liveSlot.getBoundingClientRect();
+      const cx = rect.left + rect.width/2;
+      const cy = rect.top  + rect.height/2;
+      setLensSize(lensDiameter);
+      lens.style.display = 'block';
+      setTransformOriginFromPoint(cx, cy);
+      applyLiveTransform();
+      zoomHud.textContent = 'Glass ' + Math.round(glassZoom*100) + '%';
+      zoomHud.classList.add('show');
+      clearTimeout(window._glassT); window._glassT = setTimeout(()=> zoomHud.classList.remove('show'), 900);
+    } else {
+      lens.style.display = 'none';
+      glassZoom = 1.0; // reset
+      applyBaseTransform();
+    }
+  }
+
+  // ===== Helpers =====
+  function setActive(btn){
+    document.querySelectorAll('.pill[aria-current="true"]').forEach(b=>b.removeAttribute('aria-current'));
+    if(btn) btn.setAttribute('aria-current','true');
+    saveState();
+  }
+  function showImage(key, btn){
+    if(!imageMap[key]) return;
+    overlay.src = imageMap[key];
+    overlay.style.display = 'block';
+    iframe.style.display  = 'none';
+    setMagnifier(false);
+    setActive(btn);
+  }
+  overlay.addEventListener('error', ()=>{ overlay.style.display='none'; iframe.style.display='block'; });
+
+  // ===== Nav / UI wiring =====
+  const pills = Array.from(document.querySelectorAll('.pill'));
+  pills.forEach((btn, i) => {
+    const label = btn.querySelector('.name')?.textContent?.trim() || btn.dataset.target;
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('type','button');
+    const shortcut = ((i+1) % 10).toString();
+    btn.setAttribute('aria-keyshortcuts', shortcut);
+    btn.title = `${label} (press ${shortcut})`;
+    btn.addEventListener('click', () => showImage(btn.dataset.target, btn));
+  });
+  magnifyToggle.addEventListener('click', ()=> setMagnifier(!magnifierOn));
+
+  toggle.addEventListener('click', ()=>{
+    const collapsed = menu.classList.toggle('collapsed');
+    wrap.classList.toggle('menu-collapsed');
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    saveState();
+  });
+  homeBtn.addEventListener('click', ()=>{
+    overlay.style.display = 'none';
+    iframe.style.display  = 'block';
+    setActive(null);
+    setMagnifier(false);
+    saveState();
+  });
+  reloadBtn.addEventListener('click', ()=>{
+    if(overlay.style.display === 'block' && overlay.src){
+      const src = overlay.src; overlay.src = ''; requestAnimationFrame(()=> overlay.src = src);
+    }else{
+      const src = iframe.src; iframe.src = ''; requestAnimationFrame(()=> { iframe.src = src; });
+    }
+  });
+  signOutBtn.addEventListener('click', ()=>{
+    try { localStorage.removeItem(LS); } catch {}
+    overlay.style.display = 'none';
+    iframe.style.display  = 'block';
+    setActive(null);
+    setMagnifier(false);
+  });
+
+  // ===== Page zoom (independent of magnifier) =====
+  let DEFAULT_SCALE = 0.85; // zoomed out by default
+  let scale = DEFAULT_SCALE;
+  const MIN = 0.25, MAX = 6.0, STEP = 0.1;
+  function applyScale(){
+    document.documentElement.style.setProperty('--scale', scale.toFixed(3));
+    zoomHud.textContent = Math.round(scale*100) + '%';
+    zoomHud.classList.add('show');
+    clearTimeout(applyScale._t);
+    applyScale._t = setTimeout(()=> zoomHud.classList.remove('show'), 900);
+    saveState();
+  }
+  function isEditable(e){
+    const t = e.target; return t && (t.isContentEditable || ['INPUT','TEXTAREA','SELECT','BUTTON'].includes(t.tagName));
+  }
+
+  window.addEventListener('keydown', (e)=>{
+    if(e.ctrlKey || e.metaKey || isEditable(e)) return;
+    const k = e.key.toLowerCase();
+    if(k === 'm'){ setMagnifier(!magnifierOn); return; }
+    if(k === 'escape'){ setMagnifier(false); return; }
+    if(e.key === '['){ setLensSize(lensDiameter - LENS_STEP); return; }
+    if(e.key === ']'){ setLensSize(lensDiameter + LENS_STEP); return; }
+    if(e.key === '+' || e.key === '='){ scale = Math.min(MAX, scale + STEP); applyScale(); return; }
+    if(e.key === '-') { scale = Math.max(MIN, scale - STEP); applyScale(); return; }
+    if(e.key === '9'){ scale = DEFAULT_SCALE; applyScale(); return; }
+    const idx = parseInt(e.key,10);
+    if(!Number.isNaN(idx)){
+      if(idx === 0){ overlay.style.display='none'; iframe.style.display='block'; setActive(null); return; }
+      if(idx>=1 && idx<=pills.length){ const key = pills[idx-1].dataset.target; showImage(key, pills[idx-1]); return; }
+    }
+  });
+
+  // Wheel: magnifier vs page zoom
+  liveHit.addEventListener('pointermove', (e)=> updateLensFromPoint(e.clientX, e.clientY), { passive:true });
+  liveHit.addEventListener('pointerleave', ()=>{ if (magnifierOn) lens.style.display='none'; });
+  window.addEventListener('wheel', (e)=>{
+    const frameRect = frame.getBoundingClientRect();
+    const overFrame = e.clientX >= frameRect.left && e.clientX <= frameRect.right && e.clientY >= frameRect.top && e.clientY <= frameRect.bottom;
+
+    if (magnifierOn && overFrame){
+      e.preventDefault();
+      if (e.shiftKey){
+        const dir = Math.sign(e.deltaY); setLensSize(lensDiameter - dir * LENS_STEP);
+        zoomHud.textContent = 'Glass size ' + lensDiameter + 'px';
+      } else {
+        const dir = Math.sign(e.deltaY); glassZoom = Math.min(GLASS_MAX, Math.max(GLASS_MIN, glassZoom - dir * GLASS_STEP));
+        zoomHud.textContent = 'Glass ' + Math.round(glassZoom*100) + '%';
+      }
+      zoomHud.classList.add('show');
+      clearTimeout(window._glassT); window._glassT = setTimeout(()=> zoomHud.classList.remove('show'), 900);
+      updateLensFromPoint(e.clientX, e.clientY);
+      return;
+    }
+
+    // Alt + wheel controls page zoom
+    if (e.altKey){
+      e.preventDefault();
+      const delta = Math.sign(e.deltaY); scale = Math.min(MAX, Math.max(MIN, scale - delta * STEP)); applyScale();
+    }
+  }, { passive:false });
+
+  // ===== Persist state =====
+  const LS = 'alphapwr-demo-state-v9';
+  function saveState(){
+    const state = {
+      scale,
+      collapsed: menu.classList.contains('collapsed'),
+      active: document.querySelector('.pill[aria-current="true"]')?.dataset.target || null,
+      magnifierOn,
+      glassZoom,
+      lensDiameter
+    };
+    try { localStorage.setItem(LS, JSON.stringify(state)); } catch {}
+  }
+  function loadState(){
+    try{
+      const s = JSON.parse(localStorage.getItem(LS) || '{}');
+      scale = (typeof s.scale === 'number') ? Math.min(MAX, Math.max(MIN, s.scale)) : DEFAULT_SCALE;
+      if (s.collapsed) { menu.classList.add('collapsed'); wrap.classList.add('menu-collapsed'); toggle.setAttribute('aria-expanded','false'); }
+      if (s.active){ const btn = document.querySelector('.pill[data-target="'+s.active+'"]'); if (btn) showImage(s.active, btn); }
+      lensDiameter = (typeof s.lensDiameter === 'number') ? Math.min(LENS_MAX, Math.max(LENS_MIN, s.lensDiameter)) : lensDiameter;
+      if (s.magnifierOn && typeof s.glassZoom === 'number') { glassZoom = Math.min(GLASS_MAX, Math.max(GLASS_MIN, s.glassZoom)); setMagnifier(true); }
+    }catch{}
+    applyScale();
+  }
+
+  // ===== Init =====
+  computeBaseScale();
+  applyBaseTransform();
+  applyOverlayTransform();
+  window.addEventListener('resize', ()=>{ computeBaseScale(); applyBaseTransform(); applyOverlayTransform(); });
+  loadState();
+})();
 </script>
 
 </body>
 </html>
-"""
-path = "/mnt/data/AlphaPWR-demo-side-menu-zoom-collapsed-small.html"
-with open(path, "w", encoding="utf-8") as f:
-    f.write(html_zoom_small)
-
-path
